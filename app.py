@@ -19,7 +19,26 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 EMBEDDING_MODEL = "text-embedding-3-small"
 VECTOR_DB_PATH = "vectorstore"
 DOCUMENTS_PATH = "documents"
-GROQ_MODEL = "mixtral-8x7b-32768"
+
+# Available Groq models with their descriptions
+GROQ_MODELS = {
+    "mixtral-8x7b-32768": {
+        "name": "Mixtral 8x7B",
+        "description": "Best for complex reasoning and detailed responses",
+        "max_tokens": 32768
+    },
+    "llama2-70b-4096": {
+        "name": "Llama 2 70B",
+        "description": "Good balance of performance and speed",
+        "max_tokens": 4096
+    },
+    "gemma-7b-it": {
+        "name": "Gemma 7B",
+        "description": "Fast and efficient for simpler tasks",
+        "max_tokens": 8192
+    }
+}
+
 MAX_RETRIES = 3
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
@@ -128,7 +147,7 @@ def app_header():
                 <td><h1 style="color:white;margin-left:20px">Turbo Sales Assistant ⚡</h1></td>
             </tr>
         </table>
-        <p style="margin:0;font-size:14px">Powered by Groq's ultra-fast {GROQ_MODEL} model</p>
+        <p style="margin:0;font-size:14px">Powered by Groq's ultra-fast LLM</p>
     </div>
     """
     st.markdown(header_html, unsafe_allow_html=True)
@@ -148,7 +167,7 @@ def display_chat():
 
 # --- Groq Chat Completion ---
 @retry(stop=stop_after_attempt(MAX_RETRIES), wait=wait_exponential(multiplier=1, min=4, max=10))
-def groq_chat_completion(context: str, question: str) -> str:
+def groq_chat_completion(context: str, question: str, model: str) -> str:
     try:
         chat_completion = client.chat.completions.create(
             messages=[
@@ -161,9 +180,9 @@ def groq_chat_completion(context: str, question: str) -> str:
                     "content": question
                 }
             ],
-            model=GROQ_MODEL,
+            model=model,
             temperature=0.3,
-            max_tokens=1024
+            max_tokens=GROQ_MODELS[model]["max_tokens"]
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
@@ -179,7 +198,16 @@ def main():
     with st.sidebar:
         st.header("Knowledge Base Setup")
         
+        # Model Selection
+        st.subheader("Model Selection")
+        selected_model = st.selectbox(
+            "Choose a model",
+            options=list(GROQ_MODELS.keys()),
+            format_func=lambda x: f"{GROQ_MODELS[x]['name']} - {GROQ_MODELS[x]['description']}"
+        )
+        
         # Document upload
+        st.subheader("Document Upload")
         uploaded_files = st.file_uploader(
             "Upload product docs (PDF/TXT/DOCX)",
             type=["pdf", "txt", "docx"],
@@ -219,7 +247,8 @@ def main():
         
         st.markdown("---")
         st.markdown("⚡ **Performance Info**")
-        st.markdown(f"Using: `{GROQ_MODEL}`")
+        st.markdown(f"Using: `{GROQ_MODELS[selected_model]['name']}`")
+        st.markdown(f"Max tokens: {GROQ_MODELS[selected_model]['max_tokens']}")
         st.markdown("Response times typically < 1s")
     
     # Main chat interface
@@ -258,7 +287,7 @@ def main():
                         context = format_docs(docs)
                         
                         # Get response from Groq
-                        response = groq_chat_completion(context, prompt)
+                        response = groq_chat_completion(context, prompt, selected_model)
                         
                         # Display performance
                         end_time = time.time()
