@@ -22,19 +22,24 @@ DOCUMENTS_PATH = "documents"
 
 # Available Groq models with their descriptions
 GROQ_MODELS = {
+    "llama3-70b-8192": {
+        "name": "Llama 3 70B",
+        "description": "Latest and most powerful Llama model, best for complex reasoning and detailed responses",
+        "max_tokens": 8192
+    },
+    "llama3-8b-8192": {
+        "name": "Llama 3 8B",
+        "description": "Efficient and fast model for general tasks",
+        "max_tokens": 8192
+    },
     "mixtral-8x7b-32768": {
         "name": "Mixtral 8x7B",
-        "description": "Best for complex reasoning and detailed responses",
+        "description": "Powerful mixture of experts model, excellent for complex tasks",
         "max_tokens": 32768
-    },
-    "llama2-70b-4096": {
-        "name": "Llama 2 70B",
-        "description": "Good balance of performance and speed",
-        "max_tokens": 4096
     },
     "gemma-7b-it": {
         "name": "Gemma 7B",
-        "description": "Fast and efficient for simpler tasks",
+        "description": "Google's latest model, optimized for efficiency and speed",
         "max_tokens": 8192
     }
 }
