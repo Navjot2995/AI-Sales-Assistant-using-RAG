@@ -64,45 +64,78 @@ def load_document(file_path: str):
             loader = TextLoader(file_path)
         elif file_path.endswith(".docx"):
             loader = Docx2txtLoader(file_path)
+        elif file_path.endswith(".csv"):
+            # Handle CSV files as text files
+            loader = TextLoader(file_path)
         else:
-            raise ValueError("Unsupported file format")
+            raise ValueError(f"Unsupported file format: {file_path}")
         return loader.load()
     except Exception as e:
         st.error(f"Error loading document {file_path}: {str(e)}")
         return []
 
 def process_documents():
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        length_function=len
-    )
-    
-    all_docs = []
-    progress_bar = st.progress(0)
-    total_files = len([f for f in os.listdir(DOCUMENTS_PATH) if os.path.isfile(os.path.join(DOCUMENTS_PATH, f))])
-    
-    for idx, filename in enumerate(os.listdir(DOCUMENTS_PATH)):
-        file_path = os.path.join(DOCUMENTS_PATH, filename)
-        if os.path.isfile(file_path):
+    try:
+        if not os.path.exists(DOCUMENTS_PATH):
+            st.error(f"Documents directory not found: {DOCUMENTS_PATH}")
+            return False
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
+            length_function=len
+        )
+        
+        all_docs = []
+        progress_bar = st.progress(0)
+        files = [f for f in os.listdir(DOCUMENTS_PATH) if os.path.isfile(os.path.join(DOCUMENTS_PATH, f))]
+        total_files = len(files)
+        
+        if total_files == 0:
+            st.error("No files found in documents directory")
+            return False
+
+        st.info(f"Found {total_files} files to process")
+        
+        for idx, filename in enumerate(files):
+            file_path = os.path.join(DOCUMENTS_PATH, filename)
+            st.write(f"Processing {filename}...")
             docs = load_document(file_path)
-            splits = text_splitter.split_documents(docs)
-            all_docs.extend(splits)
+            if docs:
+                splits = text_splitter.split_documents(docs)
+                all_docs.extend(splits)
+                st.write(f"Added {len(splits)} chunks from {filename}")
             progress_bar.progress((idx + 1) / total_files)
-    
-    if all_docs:
-        vectorstore = FAISS.from_documents(all_docs, OpenAIEmbeddings(model=EMBEDDING_MODEL))
-        vectorstore.save_local(VECTOR_DB_PATH)
-        return True
-    return False
+        
+        if all_docs:
+            st.write(f"Creating vector store with {len(all_docs)} total chunks...")
+            vectorstore = FAISS.from_documents(all_docs, OpenAIEmbeddings(model=EMBEDDING_MODEL))
+            vectorstore.save_local(VECTOR_DB_PATH)
+            st.success(f"Successfully processed {len(all_docs)} chunks from {total_files} files")
+            return True
+        else:
+            st.error("No valid documents were processed")
+            return False
+    except Exception as e:
+        st.error(f"Error processing documents: {str(e)}")
+        return False
 
 # --- RAG Setup with Groq ---
 @st.cache_resource
 def setup_retriever():
-    if os.path.exists(VECTOR_DB_PATH):
+    try:
+        if not os.path.exists(VECTOR_DB_PATH):
+            st.warning("Vector store not found. Please process documents first.")
+            return None
+            
+        st.write("Loading vector store...")
         vectorstore = FAISS.load_local(VECTOR_DB_PATH, OpenAIEmbeddings(model=EMBEDDING_MODEL), allow_dangerous_deserialization=True)
-        return vectorstore.as_retriever(search_kwargs={"k": 3})
-    return None
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+        st.success("Vector store loaded successfully")
+        return retriever
+    except Exception as e:
+        st.error(f"Error setting up retriever: {str(e)}")
+        return None
 
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
@@ -209,8 +242,8 @@ def main():
         # Document upload
         st.subheader("Document Upload")
         uploaded_files = st.file_uploader(
-            "Upload product docs (PDF/TXT/DOCX)",
-            type=["pdf", "txt", "docx"],
+            "Upload product docs (PDF/TXT/DOCX/CSV)",
+            type=["pdf", "txt", "docx", "csv"],
             accept_multiple_files=True
         )
         
@@ -220,6 +253,7 @@ def main():
                 file_path = os.path.join(DOCUMENTS_PATH, uploaded_file.name)
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
+                st.write(f"Saved {uploaded_file.name}")
             
             with st.spinner("Processing documents..."):
                 if process_documents():
